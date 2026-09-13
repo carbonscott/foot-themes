@@ -18,7 +18,16 @@ FTHEME_TTY="${FTHEME_TTY:-/dev/tty}"
 
 # Print the NAME=value lines from the [environment] section of the given files.
 _ftheme_env() {
-    sed -n '/^\[environment\]/,/^\[/{/^[A-Za-z_][A-Za-z0-9_]*=/p}' "$@"
+    command sed -n '/^\[environment\]/,/^\[/{/^[A-Za-z_][A-Za-z0-9_]*=/p}' "$@"
+}
+
+# Print the installed theme names, one per line. Uses a glob rather than ls,
+# which interactive shells often alias (Omarchy: ls -> eza -lh).
+_ftheme_names() {
+    local f
+    for f in "$FTHEME_DIR"/*.ini; do
+        [[ -f $f ]] && f=${f##*/} && echo "${f%.ini}"
+    done
 }
 
 # Print the OSC color sequences for theme file $1 to the terminal.
@@ -55,11 +64,11 @@ ftheme() {
     [[ $1 == -n ]] && { new=1; shift; }
 
     if [[ -n $1 ]]; then
-        name=$(ls "$FTHEME_DIR"/*.ini 2>/dev/null | xargs -n1 basename | sed 's/\.ini$//' | grep -m1 -- "$1")
+        name=$(_ftheme_names | command grep -m1 -- "$1")
         [[ $1 == default ]] && name=default
     else
         local self="${BASH_SOURCE[0]}" revert="$FTHEME_DIR/${FTHEME_CURRENT:-default}.ini"
-        name=$( { echo default; ls "$FTHEME_DIR"/*.ini | xargs -n1 basename | sed 's/\.ini$//'; } |
+        name=$( { echo default; _ftheme_names; } |
             fzf --height=~40% --reverse --prompt='foot theme> ' \
                 --header="current: ${FTHEME_CURRENT:-default}   (Esc reverts)" \
                 --bind "focus:execute-silent(bash '$self' '$FTHEME_DIR'/{}.ini)")
@@ -80,7 +89,7 @@ ftheme() {
 
     # Swap the environment: clear every var any theme sets, then export this one's.
     # (Covers vars inherited from the launch config, e.g. TERM_THEME after -c sage.)
-    for k in $(_ftheme_env "$FTHEME_DIR"/*.ini | cut -d= -f1 | sort -u); do unset "$k"; done
+    for k in $(_ftheme_env "$FTHEME_DIR"/*.ini | command cut -d= -f1 | command sort -u); do unset "$k"; done
     [[ -f $file ]] && while IFS='=' read -r k v; do export "$k=$v"; done < <(_ftheme_env "$file")
     FTHEME_CURRENT=$name
 }
